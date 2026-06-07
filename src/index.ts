@@ -54,6 +54,9 @@ app.use('/api/accounts', accountRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
+// Export app for Supertest — must be before startServer() is called
+export default app;
+
 async function startServer(): Promise<void> {
   await connectRedis();
   app.listen(PORT, () => {
@@ -62,7 +65,10 @@ async function startServer(): Promise<void> {
   });
 }
 
-startServer().catch((err) => {
-  console.error('Failed to start server:', err);
-  process.exit(-1);
-});
+// Only start the server if this file is run directly, not when imported by tests
+if (require.main === module) {
+  startServer().catch((err) => {
+    console.error('Failed to start server:', err);
+    process.exit(-1);
+  });
+}

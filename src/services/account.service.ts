@@ -10,6 +10,38 @@ function accountCacheKey(accountId: string): string {
   return `account:${accountId}`;
 }
 
+// Safely read from Redis. If Redis is down, returns null and logs the error.
+// The caller falls through to the database — no crash, no 500.
+async function cacheGet(key: string): Promise<string | null> {
+  try {
+    return await redisClient.get(key);
+  } catch (err) {
+    console.error('[Cache] GET failed, bypassing cache:', err);
+    return null;
+  }
+}
+
+// Safely write to Redis. If Redis is down, we log and move on.
+// A failed cache write is not a failed request.
+async function cacheSet(key: string, ttl: number, value: string): Promise<void> {
+  try {
+    await redisClient.setEx(key, ttl, value);
+  } catch (err) {
+    console.error('[Cache] SET failed, bypassing cache:', err);
+  }
+}
+
+// Safely delete from Redis. Critical: this must never throw inside a transaction.
+// If Redis is down after a successful COMMIT, the transaction still succeeded.
+// We log the failure and move on — the next read will simply hit the database.
+async function cacheDel(key: string): Promise<void> {
+  try {
+    await redisClient.del(key);
+  } catch (err) {
+    console.error('[Cache] DEL failed, cache may be stale for key:', key, err);
+  }
+}
+
 export async function createAccount(
   accountName: string,
   userId: string
@@ -32,16 +64,15 @@ export async function getAccount(
 ): Promise<Account | null> {
   const cacheKey = accountCacheKey(id);
 
-  // 1. Check Redis first
-  const cached = await redisClient.get(cacheKey);
+  // 1. Try Redis — failure returns null, not a crash
+  const cached = await cacheGet(cacheKey);
   if (cached) {
     const account: Account = JSON.parse(cached);
-    // Ownership check on cached data — never skip this
     if (account.user_id !== userId) return null;
     return account;
   }
 
-  // 2. Cache miss — query the database
+  // 2. Cache miss or Redis down — query the database
   const result = await query(
     `SELECT * FROM accounts WHERE id = $1 AND user_id = $2`,
     [id, userId]
@@ -49,9 +80,9 @@ export async function getAccount(
 
   const account = result.rows[0] || null;
 
-  // 3. Store in Redis with 5 minute TTL
+  // 3. Try to cache — failure is logged, not thrown
   if (account) {
-    await redisClient.setEx(cacheKey, 300, JSON.stringify(account));
+    await cacheSet(cacheKey, 300, JSON.stringify(account));
   }
 
   return account;
@@ -117,8 +148,9 @@ export async function processTransaction(
 
     await client.query('COMMIT');
 
-    // Invalidate cache — balance changed, stale data is dangerous in banking
-    await redisClient.del(accountCacheKey(accountId));
+    // Cache invalidation — wrapped safely. Redis down here must NOT
+    // cause the API to report a failed transaction. The DB already committed.
+    await cacheDel(accountCacheKey(accountId));
 
     return {
       account: updatedAccount.rows[0],

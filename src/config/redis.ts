@@ -5,6 +5,7 @@ const redisClient = createClient({
     host: process.env.REDIS_HOST || 'localhost',
     port: Number(process.env.REDIS_PORT) || 6379,
   },
+  RESP: 2,
 });
 
 redisClient.on('error', (err) => {
