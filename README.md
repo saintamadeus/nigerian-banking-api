@@ -1,5 +1,7 @@
 # Nigerian Banking API
 
+![CI](https://github.com/saintamadeus/nigerian-banking-api/actions/workflows/ci.yml/badge.svg)
+
 A production-grade RESTful banking API built with Node.js, TypeScript, Express, PostgreSQL, and Redis. Built to demonstrate backend engineering competency for roles in Nigerian banking and fintech.
 
 ## Tech Stack
@@ -25,6 +27,17 @@ A production-grade RESTful banking API built with Node.js, TypeScript, Express, 
 - Request logging via Morgan
 - Fail-fast startup on missing environment variables
 
+## Testing
+
+- 11 integration tests across auth and account flows
+- Jest + Supertest
+- Isolated test database (`nigeria_banking_test_db`)
+- Redis mocked — tests never depend on cache infrastructure
+
+```bash
+npm test
+```
+
 ## Project Structure
 src/
 config/         # Database pool, JWT helpers, Redis client
@@ -48,7 +61,13 @@ types/          # TypeScript interfaces
 | GET | /api/accounts/:id/transactions | Yes | Transaction history |
 
 ## Setup
+### With Docker (recommended)
 
+```bash
+docker-compose up --build
+```
+
+### Manual setup
 1. Clone the repo
 2. Install dependencies: `npm install`
 3. Copy `.env.example` to `.env` and fill in your values
