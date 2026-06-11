@@ -86,3 +86,16 @@ See `.env.example` for required variables.
 - All account endpoints enforce ownership via `AND user_id = $2` in SQL — authorization at the database level, not application level
 - Cache ownership re-verified on every Redis read
 - Server refuses to start if `DB_PASSWORD` or `JWT_SECRET` are missing
+
+- **Monitoring**: Prometheus + Grafana
+- **Deployment**: Railway
+
+## Live Deployment
+
+The API is deployed and accessible at:
+
+**Base URL**: `https://nigerian-banking-api-production.up.railway.app`
+
+### Observability
+- **Prometheus**: Scrapes `/metrics` every 15 seconds
+- **Grafana**: Live dashboard tracking request rate, total requests, and memory usage
