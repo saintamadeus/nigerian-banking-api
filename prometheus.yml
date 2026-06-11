@@ -1,0 +1,8 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'nigerian-banking-api'
+    static_configs:
+      - targets: ['nigerian-banking-api.railway.internal:8080']
+    metrics_path: '/metrics'
