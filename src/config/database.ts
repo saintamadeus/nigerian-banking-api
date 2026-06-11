@@ -1,12 +1,20 @@
 import { Pool } from 'pg';
 
-if (!process.env.DB_PASSWORD) {
-  throw new Error('DB_PASSWORD environment variable is required');
+if (!process.env.DATABASE_URL && !process.env.DB_PASSWORD) {
+  throw new Error('Either DATABASE_URL or DB_PASSWORD environment variable is required');
 }
 
 const pool = new Pool(
   process.env.NODE_ENV === 'test'
     ? { connectionString: process.env.TEST_DATABASE_URL }
+    : process.env.DATABASE_URL
+    ? {
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false },
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 2000,
+      }
     : {
         host: process.env.DB_HOST || 'localhost',
         port: Number(process.env.DB_PORT) || 5432,
