@@ -8,9 +8,19 @@ const kafka = new Kafka({
 let producer: Producer | null = null;
 
 export async function connectProducer(): Promise<void> {
-  producer = kafka.producer();
-  await producer.connect();
-  console.log('Kafka producer connected');
+  if (!process.env.KAFKA_BROKER) {
+    console.warn('KAFKA_BROKER not set — Kafka producer disabled');
+    return;
+  }
+
+  try {
+    producer = kafka.producer();
+    await producer.connect();
+    console.log('Kafka producer connected');
+  } catch (err) {
+    console.error('Kafka producer failed to connect — running without Kafka:', err);
+    producer = null;
+  }
 }
 
 export async function publishTransactionEvent(data: {
