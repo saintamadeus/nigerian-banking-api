@@ -1,6 +1,7 @@
 import { query, getClient } from '../config/database';
 import redisClient from '../config/redis';
 import { Account, Transaction } from '../types';
+import { publishTransactionEvent } from '../config/kafka';
 
 function generateAccountNumber(): string {
   return Math.floor(1000000000 + Math.random() * 9000000000).toString();
@@ -152,9 +153,25 @@ export async function processTransaction(
     // cause the API to report a failed transaction. The DB already committed.
     await cacheDel(accountCacheKey(accountId));
 
+    // Publish Kafka event — wrapped safely in publishTransactionEvent.
+    // Kafka failure must never cause the API to report a failed transaction.
+    const tx = transactionResult.rows[0];
+    const acc = updatedAccount.rows[0];
+    await publishTransactionEvent({
+      transactionId: tx.id,
+      accountId: acc.id,
+      accountNumber: acc.account_number,
+      accountName: acc.account_name,
+      type: tx.type,
+      amount: tx.amount,
+      balanceBefore: tx.balance_before,
+      balanceAfter: tx.balance_after,
+      description: tx.description || '',
+    });
+
     return {
-      account: updatedAccount.rows[0],
-      transaction: transactionResult.rows[0],
+      account: acc,
+      transaction: tx,
     };
   } catch (err) {
     await client.query('ROLLBACK');

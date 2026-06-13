@@ -4,6 +4,7 @@ dotenv.config();
 import express from 'express';
 import register, { httpRequestCounter, httpRequestDuration } from './config/metrics';
 import helmet from 'helmet';
+import { connectProducer } from './config/kafka';
 import rateLimit from 'express-rate-limit';
 import accountRoutes from './routes/account.routes';
 import authRoutes from './routes/auth.routes';
@@ -84,6 +85,7 @@ export default app;
 
 async function startServer(): Promise<void> {
   await connectRedis();
+  await connectProducer();
   app.listen(PORT, () => {
     console.log(`Banking API running on port ${PORT}`);
     console.log(`Health check: http://localhost:${PORT}/health`);
