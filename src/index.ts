@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+import cors from 'cors';
 import express from 'express';
 import register, { httpRequestCounter, httpRequestDuration } from './config/metrics';
 import helmet from 'helmet';
@@ -15,6 +16,15 @@ import { connectRedis } from './config/redis';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.use(cors({
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:3000',
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false,
+}));
 app.use(helmet());
 app.use(logger);
 
