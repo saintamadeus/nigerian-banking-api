@@ -1,3 +1,4 @@
+import Decimal from 'decimal.js';
 import { query, getClient } from '../config/database';
 import redisClient from '../config/redis';
 import { Account, Transaction } from '../types';
@@ -146,23 +147,36 @@ export async function processTransaction(
     }
 
     const account = accountResult.rows[0];
-    const balanceBefore = parseFloat(account.balance);
 
-    if (type === 'debit' && balanceBefore < amount) {
+    // account.balance comes back from Postgres as a string (e.g. "150.00").
+    // Parsing it with parseFloat and doing native JS arithmetic on money is
+    // how you get 0.1 + 0.2 = 0.30000000000000004 style drift creeping into
+    // account balances over thousands of transactions. Decimal.js does
+    // exact base-10 arithmetic instead.
+    const balanceBefore = new Decimal(account.balance);
+    const amountDecimal = new Decimal(amount).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+
+    if (type === 'debit' && balanceBefore.lessThan(amountDecimal)) {
       throw new Error('Insufficient funds');
     }
 
     const balanceAfter =
       type === 'credit'
-        ? balanceBefore + amount
-        : balanceBefore - amount;
+        ? balanceBefore.plus(amountDecimal)
+        : balanceBefore.minus(amountDecimal);
+
+    // Pass fixed-precision strings to pg, not JS numbers — this preserves
+    // exact decimal precision all the way into the DECIMAL(15,2) column.
+    const balanceAfterStr = balanceAfter.toFixed(2);
+    const balanceBeforeStr = balanceBefore.toFixed(2);
+    const amountStr = amountDecimal.toFixed(2);
 
     const updatedAccount = await client.query(
       `UPDATE accounts
        SET balance = $1, updated_at = NOW()
        WHERE id = $2 AND user_id = $3
        RETURNING *`,
-      [balanceAfter, accountId, userId]
+      [balanceAfterStr, accountId, userId]
     );
 
     const transactionResult = await client.query(
@@ -170,7 +184,7 @@ export async function processTransaction(
          (account_id, type, amount, balance_before, balance_after, description)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [accountId, type, amount, balanceBefore, balanceAfter, description || null]
+      [accountId, type, amountStr, balanceBeforeStr, balanceAfterStr, description || null]
     );
 
     await client.query('COMMIT');

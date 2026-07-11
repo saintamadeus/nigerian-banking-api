@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import * as AccountService from '../services/account.service';
 import { AuthRequest } from '../middleware/auth';
 import { safeErrorMessage } from '../utils/errorResponse';
+import Decimal from 'decimal.js';
 
 export const createAccount = async (req: AuthRequest, res: Response): Promise<void> => {
   const { accountName } = req.body;
@@ -103,11 +104,21 @@ export const processTransaction = async (req: AuthRequest, res: Response): Promi
     return;
   }
 
-  if (typeof amount !== 'number' || amount <= 0) {
+  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
     res.status(400).json({
       success: false,
       message: 'Validation failed',
       error: 'amount must be a positive number',
+    });
+    return;
+  }
+
+  const amountDecimal = new Decimal(amount);
+  if (!amountDecimal.equals(amountDecimal.toDecimalPlaces(2))) {
+    res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      error: 'amount must have at most 2 decimal places',
     });
     return;
   }

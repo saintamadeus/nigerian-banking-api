@@ -1,12 +1,17 @@
 export type TransactionType = 'credit' | 'debit';
 
+// node-postgres returns DECIMAL/NUMERIC columns as strings, not JS numbers,
+// specifically to avoid silent floating-point precision loss on money
+// values. These types now reflect that reality instead of lying about it —
+// callers that need to do arithmetic should parse through Decimal.js
+// (see account.service.ts), not `+`.
 export interface Transaction {
   id: string;
   account_id: string;
   type: TransactionType;
-  amount: number;
-  balance_before: number;
-  balance_after: number;
+  amount: string;
+  balance_before: string;
+  balance_after: string;
   description?: string;
   created_at: Date;
 }
@@ -15,7 +20,7 @@ export interface Account {
   id: string;
   account_number: string;
   account_name: string;
-  balance: number;
+  balance: string;
   user_id: string;
   created_at: Date;
   updated_at: Date;
