@@ -200,6 +200,15 @@ Cached in Redis on read; cache is invalidated on every transaction against this 
 
 ### `POST /api/accounts/:id/transaction`
 
+**Headers:**
+- `Idempotency-Key` (optional, recommended) — any client-generated string
+  (e.g. a UUID) unique per intended transaction. If a request with the same
+  key on the same account is retried (network timeout, double-click, etc.),
+  the API returns the original transaction instead of applying the
+  debit/credit a second time. Omitting it is allowed but means retries are
+  **not** safe — a retried request without a key will be treated as a new,
+  separate transaction.
+
 **Request body:**
 ```json
 {
@@ -209,7 +218,7 @@ Cached in Redis on read; cache is invalidated on every transaction against this 
 }
 ```
 - `type` must be exactly `"credit"` or `"debit"` — NOT `"deposit"`/`"withdrawal"`.
-- `amount` must be a positive number (not a string — send a real JSON number).
+- `amount` must be a positive number with at most 2 decimal places (not a string — send a real JSON number). `10.999` is rejected; `10.99` is not.
 - `description` is optional.
 
 **Success — 200:**
@@ -242,12 +251,15 @@ Cached in Redis on read; cache is invalidated on every transaction against this 
 ```
 **Important:** the updated balance lives at `data.account.balance`, NOT at a top-level `newBalance` field. There is no separate `newBalance` key — verify before assuming.
 
+If the request is a replay of a previous `Idempotency-Key` on this account, the response is still `200` with `success: true`, but `message` is `"Transaction already processed (idempotent replay)"` and `data` reflects the *original* transaction, not a new one.
+
 **Failure:**
-- `400` — missing `type`/`amount`, invalid `type` value, non-positive `amount`, or **insufficient funds** (the specific reason is in `error`, e.g. `"Insufficient funds"` — display `error`, not the generic `message`)
+- `400` — missing `type`/`amount`, invalid `type` value, non-positive or over-precision `amount`, or **insufficient funds** (the specific reason is in `error`, e.g. `"Insufficient funds"` — display `error`, not the generic `message`)
 - `404` — account not found / not owned by user
+- `409` — the same `Idempotency-Key` was reused on this account for what the server considers a distinct, concurrent request (rare defense-in-depth case; a clean retry with the same key normally returns 200, not 409)
 - `500` — unexpected server error
 
-Row-locked via `SELECT ... FOR UPDATE` inside a transaction to prevent race conditions on concurrent requests against the same account. Publishes a `TRANSACTION_COMPLETED` Kafka event after COMMIT (non-fatal if Kafka is unavailable).
+Row-locked via `SELECT ... FOR UPDATE` inside a transaction to prevent race conditions on concurrent requests against the same account. The same row lock backs the idempotency check, so a retried request on the same account is serialized behind the original rather than racing it. Publishes a `TRANSACTION_COMPLETED` Kafka event after COMMIT (non-fatal if Kafka is unavailable) — skipped on idempotent replays since nothing new happened.
 
 ---
 

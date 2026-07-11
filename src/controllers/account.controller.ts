@@ -123,16 +123,36 @@ export const processTransaction = async (req: AuthRequest, res: Response): Promi
     return;
   }
 
+  const idempotencyKeyHeader = req.header('Idempotency-Key');
+  if (idempotencyKeyHeader !== undefined && typeof idempotencyKeyHeader !== 'string') {
+    res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      error: 'Idempotency-Key header must be a string',
+    });
+    return;
+  }
+
   try {
-    const result = await AccountService.processTransaction(id, userId, type, amount, description);
+    const result = await AccountService.processTransaction(
+      id,
+      userId,
+      type,
+      amount,
+      description,
+      idempotencyKeyHeader
+    );
     res.status(200).json({
       success: true,
-      message: 'Transaction processed successfully',
-      data: result,
+      message: result.replayed
+        ? 'Transaction already processed (idempotent replay)'
+        : 'Transaction processed successfully',
+      data: { account: result.account, transaction: result.transaction },
     });
   } catch (err: any) {
     const status = err.message.includes('not found') ? 404
       : err.message.includes('Insufficient') ? 400
+      : err.message.includes('Duplicate transaction') ? 409
       : 500;
 
     res.status(status).json({
