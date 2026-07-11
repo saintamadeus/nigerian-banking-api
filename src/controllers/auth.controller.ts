@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import * as AuthService from '../services/auth.service';
+import { safeErrorMessage } from '../utils/errorResponse';
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   const { email, password, fullName } = req.body;
@@ -34,7 +35,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     res.status(status).json({
       success: false,
       message: 'Registration failed',
-      error: err.message,
+      error: safeErrorMessage(err, status),
     });
   }
 };
@@ -63,7 +64,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     res.status(status).json({
       success: false,
       message: 'Login failed',
-      error: err.message,
+      error: safeErrorMessage(err, status),
     });
   }
 };

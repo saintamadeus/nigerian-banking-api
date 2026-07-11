@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import * as AccountService from '../services/account.service';
 import { AuthRequest } from '../middleware/auth';
+import { safeErrorMessage } from '../utils/errorResponse';
 
 export const createAccount = async (req: AuthRequest, res: Response): Promise<void> => {
   const { accountName } = req.body;
@@ -26,7 +27,7 @@ export const createAccount = async (req: AuthRequest, res: Response): Promise<vo
     res.status(500).json({
       success: false,
       message: 'Failed to create account',
-      error: err.message,
+      error: safeErrorMessage(err, 500),
     });
   }
 };
@@ -45,7 +46,7 @@ export const getUserAccounts = async (req: AuthRequest, res: Response): Promise<
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve accounts',
-      error: err.message,
+      error: safeErrorMessage(err, 500),
     });
   }
 };
@@ -74,7 +75,7 @@ export const getAccount = async (req: AuthRequest, res: Response): Promise<void>
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve account',
-      error: err.message,
+      error: safeErrorMessage(err, 500),
     });
   }
 };
@@ -126,7 +127,7 @@ export const processTransaction = async (req: AuthRequest, res: Response): Promi
     res.status(status).json({
       success: false,
       message: 'Transaction failed',
-      error: err.message,
+      error: safeErrorMessage(err, status),
     });
   }
 };
@@ -146,7 +147,7 @@ export const getTransactionHistory = async (req: AuthRequest, res: Response): Pr
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve transaction history',
-      error: err.message,
+      error: safeErrorMessage(err, 500),
     });
   }
 };
