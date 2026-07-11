@@ -43,20 +43,46 @@ async function cacheDel(key: string): Promise<void> {
   }
 }
 
+const MAX_ACCOUNT_NUMBER_ATTEMPTS = 5;
+const POSTGRES_UNIQUE_VIOLATION = '23505';
+
 export async function createAccount(
   accountName: string,
   userId: string
 ): Promise<Account> {
-  const accountNumber = generateAccountNumber();
+  for (let attempt = 1; attempt <= MAX_ACCOUNT_NUMBER_ATTEMPTS; attempt++) {
+    const accountNumber = generateAccountNumber();
 
-  const result = await query(
-    `INSERT INTO accounts (account_number, account_name, balance, user_id)
-     VALUES ($1, $2, $3, $4)
-     RETURNING *`,
-    [accountNumber, accountName, 0.00, userId]
-  );
+    try {
+      const result = await query(
+        `INSERT INTO accounts (account_number, account_name, balance, user_id)
+         VALUES ($1, $2, $3, $4)
+         RETURNING *`,
+        [accountNumber, accountName, 0.00, userId]
+      );
 
-  return result.rows[0];
+      return result.rows[0];
+    } catch (err: any) {
+      // account_number has a UNIQUE constraint. A collision on a random
+      // 10-digit number is rare but not impossible — retry with a fresh
+      // number instead of failing the request outright.
+      const isAccountNumberCollision =
+        err?.code === POSTGRES_UNIQUE_VIOLATION &&
+        err?.constraint?.includes('account_number');
+
+      if (!isAccountNumberCollision) {
+        throw err;
+      }
+
+      if (attempt === MAX_ACCOUNT_NUMBER_ATTEMPTS) {
+        throw new Error('Could not generate a unique account number, please try again');
+      }
+      // otherwise loop and retry with a new number
+    }
+  }
+
+  // Unreachable, but keeps TypeScript's control-flow analysis happy.
+  throw new Error('Could not generate a unique account number, please try again');
 }
 
 export async function getAccount(
