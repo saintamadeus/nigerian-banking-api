@@ -26,14 +26,5 @@ CREATE TABLE IF NOT EXISTS transactions (
   balance_before DECIMAL(15,2) NOT NULL,
   balance_after DECIMAL(15,2) NOT NULL,
   description TEXT,
-  idempotency_key VARCHAR(255),
   created_at TIMESTAMP DEFAULT NOW()
 );
-
--- A client-supplied Idempotency-Key is unique per account: retrying the
--- same key on the same account returns the original transaction instead
--- of applying the debit/credit twice. NULL keys are exempt (idempotency
--- is optional, not required) so this only constrains requests that opt in.
-CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_account_idempotency_key
-  ON transactions (account_id, idempotency_key)
-  WHERE idempotency_key IS NOT NULL;

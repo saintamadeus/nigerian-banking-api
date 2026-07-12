@@ -130,9 +130,8 @@ export async function processTransaction(
   userId: string,
   type: 'credit' | 'debit',
   amount: number,
-  description?: string,
-  idempotencyKey?: string
-): Promise<{ account: Account; transaction: Transaction; replayed: boolean }> {
+  description?: string
+): Promise<{ account: Account; transaction: Transaction }> {
   const client = await getClient();
 
   try {
@@ -148,28 +147,6 @@ export async function processTransaction(
     }
 
     const account = accountResult.rows[0];
-
-    // Idempotency check. The FOR UPDATE lock above already serializes
-    // concurrent requests against this same account, so by the time a
-    // retried request gets here, an earlier request using the same key
-    // (if any) has already committed and is visible to this query.
-    // A unique index on (account_id, idempotency_key) backs this up as a
-    // defense-in-depth guard against races this lock doesn't cover.
-    if (idempotencyKey) {
-      const existing = await client.query(
-        `SELECT * FROM transactions WHERE account_id = $1 AND idempotency_key = $2`,
-        [accountId, idempotencyKey]
-      );
-
-      if (existing.rows.length > 0) {
-        await client.query('ROLLBACK');
-        return {
-          account,
-          transaction: existing.rows[0],
-          replayed: true,
-        };
-      }
-    }
 
     // account.balance comes back from Postgres as a string (e.g. "150.00").
     // Parsing it with parseFloat and doing native JS arithmetic on money is
@@ -204,10 +181,10 @@ export async function processTransaction(
 
     const transactionResult = await client.query(
       `INSERT INTO transactions
-         (account_id, type, amount, balance_before, balance_after, description, idempotency_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+         (account_id, type, amount, balance_before, balance_after, description)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [accountId, type, amountStr, balanceBeforeStr, balanceAfterStr, description || null, idempotencyKey || null]
+      [accountId, type, amountStr, balanceBeforeStr, balanceAfterStr, description || null]
     );
 
     await client.query('COMMIT');
@@ -235,19 +212,9 @@ export async function processTransaction(
     return {
       account: acc,
       transaction: tx,
-      replayed: false,
     };
-  } catch (err: any) {
+  } catch (err) {
     await client.query('ROLLBACK');
-
-    // Defense-in-depth: if the FOR UPDATE serialization above was somehow
-    // bypassed (e.g. a future code path uses a different connection) and
-    // two requests with the same idempotency key both reach the INSERT,
-    // the unique index catches it here rather than double-applying funds.
-    if (err?.code === '23505' && err?.constraint?.includes('idempotency_key')) {
-      throw new Error('Duplicate transaction request (idempotency key already used)');
-    }
-
     throw err;
   } finally {
     client.release();
